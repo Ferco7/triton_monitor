@@ -1,74 +1,152 @@
-"""
-Formateador JSON estructurado y pipeline de logging no bloqueante.
-Cola segura en memoria + RotatingFileHandler + compresion Gzip.
+# src/triton_telemetry/logging_engine.py
 
-responsable: integrante 3 (formatter)
-responsable: integrante 4 (pipeline)
+import json
+import logging
+import logging.config
+import logging.handlers
+import queue
+import os
+import gzip
+import shutil
+from datetime import datetime, timezone
+from typing import Any, Dict
 
-INSTRUCCIONES:
-PARTE 1 (Integrante 3) - Formatter:
-1. Crear clase AsyncJSONFormatter que herede de logging.Formatter
-2. Implementar _serialize_exception para serializar ExceptionGroups recursivamente
-3. Implementar format para convertir LogRecord a JSON
+# --- Callbacks de Compresion GZIP (Facundo Alegre) ---
+def gzip_namer(name: str) -> str:
+    """Modifica el nombre del archivo de backup agregando la extension .gz."""
+    return name + ".gz"
 
-PARTE 2 (Integrante 4) - Pipeline:
-1. Crear callbacks gzip_namer y gzip_rotator para compresion
-2. Crear setup_triton_logging con dictConfig
-3. Configurar RotatingFileHandler (2MB, 3 backups)
-4. Configurar QueueHandler + QueueListener
+def gzip_rotator(source: str, dest: str):
+    """Comprime el archivo rotado a .gz y elimina el original."""
+    with open(source, 'rb') as f_in:
+        with gzip.open(dest, 'wb', compresslevel=9) as f_out:
+            shutil.copyfileobj(f_in, f_out)
+    os.remove(source)
 
-REGLAS:
-- AsyncJSONFormatter debe heredar de logging.Formatter
-- _serialize_exception debe ser recursivo (ExceptionGroup anidados)
-- format debe retornar un string JSON
-- gzip_namer agrega extension .gz
-- gzip_rotator comprime con gzip y elimina original
-- setup_triton_logging configura dictConfig con ambos handlers
-- RotatingFileHandler: maxBytes=2MB, backupCount=3
-- QueueHandler + QueueListener para desacoplamiento no bloqueante
-"""
 
-# IMPORTS PERMITIDOS:
-# import json
-# import logging
-# import logging.config
-# import logging.handlers
-# import queue
-# import os
-# import gzip
-# import shutil
-# from datetime import datetime, timezone
-# from typing import Any, Dict
+# --- Formateador JSON (Mauricio Mamani) ---
+class AsyncJSONFormatter(logging.Formatter):
+    """Formateador JSON recursivo para serializar ExceptionGroups y trazas."""
 
-# CLASE: AsyncJSONFormatter(logging.Formatter)
-# Metodos:
-#   _serialize_exception(exc: BaseException) -> dict
-#     - Serializa recursivamente excepciones
-#     - Soporta ExceptionGroup (nested_exceptions)
-#     - Soporta encadenamiento (__cause__)
-#     - Captura __notes__
-#
-#   format(record: logging.LogRecord) -> str
-#     - Convierte LogRecord a JSON
-#     - Incluye: timestamp ISO 8601 UTC, level, logger, message
-#     - Incluye: async_task, thread_name, filename, line
-#     - Incluye: exception_tree, stack_trace (si hay excepcion)
-#     - Incluye: metadatos dinamicos via extra
+    def _serialize_exception(self, exc: BaseException) -> Dict[str, Any]:
+        """Estructura recursivamente una excepción y sus causas/notas."""
+        exc_data: Dict[str, Any] = {
+            "class": exc.__class__.__name__,
+            "message": str(exc),
+            "notes": getattr(exc, "__notes__", [])
+        }
 
-# FUNCION 1: gzip_namer(name: str) -> str
-# - Agrega extension .gz al nombre del archivo
+        # Si es un ExceptionGroup, serializa sus excepciones anidadas
+        if isinstance(exc, ExceptionGroup):
+            exc_data["nested_exceptions"] = [
+                self._serialize_exception(nested_err) for nested_err in exc.exceptions
+            ]
 
-# FUNCION 2: gzip_rotator(source: str, dest: str) -> None
-# - Comprime source a dest usando gzip
-# - Elimina source despues de comprimir
+        # Si tiene una causa (raise ... from), serialízala
+        if exc.__cause__:
+            exc_data["cause"] = self._serialize_exception(exc.__cause__)
 
-# FUNCION 3: setup_triton_logging(log_filename: str = "triton_services.log") -> logging.Logger
-# - Configura dictConfig con:
-#   - formatter json_structured (AsyncJSONFormatter)
-#   - formatter console_clean (formato legible)
-#   - handler stdout_console (StreamHandler)
-#   - handler rotating_file (RotatingFileHandler)
-#   - logger triton_monitor con ambos handlers
-# - Inyecta callbacks gzip_namer y gzip_rotator
-# - Configura QueueHandler + QueueListener
-# - Retorna el logger configurado
+        return exc_data
+
+    def format(self, record: logging.LogRecord) -> str:
+        # Timestamp ISO 8601 UTC
+        dt_utc = datetime.fromtimestamp(record.created, tz=timezone.utc)
+
+        log_payload: Dict[str, Any] = {
+            "timestamp": dt_utc.isoformat().replace("+00:00", "Z"),
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+            "async_task": getattr(record, "taskName", None),
+            "thread_name": record.threadName,
+            "process": record.process,
+            "filename": record.filename,
+            "line": record.lineno
+        }
+
+        # Serializa el árbol de excepciones si existe
+        if record.exc_info:
+            exc_type, exc_value, exc_tb = record.exc_info
+            if exc_value:
+                log_payload["exception_tree"] = self._serialize_exception(exc_value)
+                log_payload["stack_trace"] = self.formatException(record.exc_info)
+
+        # Captura metadatos dinámicos del parámetro 'extra'
+        reserved_fields = {
+            "name", "msg", "args", "levelname", "levelno", "pathname", "filename",
+            "module", "exc_info", "exc_text", "stack_info", "lineno", "funcName",
+            "created", "msecs", "relativeCreated", "thread", "threadName",
+            "processName", "process", "message", "taskName"
+        }
+        for key, value in record.__dict__.items():
+            if key not in reserved_fields and not key.startswith('_'):
+                log_payload[key] = value
+
+        return json.dumps(log_payload, ensure_ascii=False)
+
+
+# --- Pipeline No Bloqueante (Facundo Alegre) ---
+def setup_triton_logging(log_filename: str = "triton_services.log") -> logging.Logger:
+    """Configura el logging con QueueHandler y QueueListener."""
+
+    logging_schema = {
+        "version": 1,
+        "disable_existing_loggers": False,
+        "formatters": {
+            "json_structured": {"()": AsyncJSONFormatter},
+            "console_clean": {
+                "format": "%(asctime)s [%(levelname)s] (%(taskName)s) %(message)s",
+                "datefmt": "%H:%M:%S"
+            }
+        },
+        "handlers": {
+            "stdout_console": {
+                "class": "logging.StreamHandler",
+                "level": "INFO",
+                "formatter": "console_clean",
+                "stream": "ext://sys.stdout"
+            },
+            "rotating_file": {
+                "class": "logging.handlers.RotatingFileHandler",
+                "level": "DEBUG",
+                "formatter": "json_structured",
+                "filename": log_filename,
+                "maxBytes": 2 * 1024 * 1024,  # 2 MB
+                "backupCount": 3,
+                "encoding": "utf-8"
+            }
+        },
+        "loggers": {
+            "triton_monitor": {
+                "level": "DEBUG",
+                "handlers": ["stdout_console", "rotating_file"],
+                "propagate": False
+            }
+        }
+    }
+
+    logging.config.dictConfig(logging_schema)
+    app_logger = logging.getLogger("triton_monitor")
+
+    # --- Inyección de callbacks de compresión GZIP ---
+    for handler in app_logger.handlers:
+        if isinstance(handler, logging.handlers.RotatingFileHandler):
+            handler.namer = gzip_namer
+            handler.rotator = gzip_rotator
+
+    # --- Desacoplamiento no bloqueante con Queue ---
+    log_queue = queue.Queue(-1)
+    queue_handler = logging.handlers.QueueHandler(log_queue)
+
+    # Tomamos los handlers síncronos y se los pasamos al listener
+    real_handlers = app_logger.handlers
+    listener = logging.handlers.QueueListener(log_queue, *real_handlers, respect_handler_level=True)
+
+    # Reemplazamos los handlers del logger por el QueueHandler
+    app_logger.handlers = [queue_handler]
+
+    # Iniciamos el listener en un hilo secundario y lo guardamos como atributo
+    listener.start()
+    app_logger.listener = listener
+
+    return app_logger
