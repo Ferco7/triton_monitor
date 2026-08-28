@@ -3,69 +3,106 @@ Logica asincrona de consulta paralela con httpx + asyncio.gather + ExceptionGrou
 Consume APIs reales en internet (jsonplaceholder, httpbin).
 
 responsable: integrante 2
-
-INSTRUCCIONES:
-1. Crear 2 funciones asincronas
-2. query_provider_telemetry: consulta la API de un proveedor
-3. scan_all_providers: orquesta las 3 consultas en paralelo
-4. Capturar errores httpx y relanzar como excepciones de Triton
-5. Usar asyncio.gather + ExceptionGroup manual para ejecucion paralela
-
-REGLAS:
-- Usar httpx.AsyncClient para las peticiones HTTP
-- Usar asyncio.gather con return_exceptions=True para ejecucion paralela
-- Recolectar todas las excepciones en una lista
-- Si hay errores, crear ExceptionGroup manualmente con raise ExceptionGroup(..., errors)
-- NO usar asyncio.TaskGroup (cancela las demas tareas al fallar una, perdiendo excepciones)
-- Capturar httpx.TimeoutException -> ProviderTimeoutError
-- Capturar httpx.HTTPStatusError -> NetworkPeeringError
-- Capturar httpx.RequestError -> NetworkPeeringError
-- Capturar json.JSONDecodeError -> CorruptedPayloadError
-- Usar add_note() para agregar contexto forense
-- Usar raise ... from para encadenar excepciones
 """
+import asyncio
+import json
+import time
+import httpx
+from typing import Any, Dict
+from .exceptions import ProviderTimeoutError, CorruptedPayloadError, NetworkPeeringError
 
-# IMPORTS PERMITIDOS:
-# import asyncio
-# import logging
-# import json
-# import httpx
-# from typing import Any, Dict
-# from .exceptions import ProviderTimeoutError, CorruptedPayloadError, NetworkPeeringError
 
-# VARIABLES GLOBALES:
-# PROVIDER_ENDPOINTS = {
-#     "AWS": "https://jsonplaceholder.typicode.com/posts/1",
-#     "Azure": "https://jsonplaceholder.typicode.com/posts/2",
-#     "GCP": "https://jsonplaceholder.typicode.com/posts/3"
-# }
-# CHAOS_ENDPOINTS = {
-#     "TIMEOUT_TRIGGER": "https://httpbin.org/delay/3",
-#     "BAD_GATEWAY_TRIGGER": "https://httpbin.org/status/504",
-#     "CORRUPTED_TRIGGER": "https://httpbin.org/xml"
-# }
+# Proveedores cloud soportados (nombres alineados con app_operator.py)
+PROVIDER_ENDPOINTS: Dict[str, str] = {
+    "AWS": "https://jsonplaceholder.typicode.com/posts/1",
+    "Azure": "https://jsonplaceholder.typicode.com/posts/2",
+    "GCP": "https://jsonplaceholder.typicode.com/posts/3",
+}
 
-# FUNCION 1: query_provider_telemetry
-# - Recibe: provider (str), timeout (float), use_chaos (bool)
-# - Retorna: dict con keys: provider, status, latency_sec, payload_id
-# - Lanza: ProviderTimeoutError, CorruptedPayloadError, NetworkPeeringError
-# - Reglas:
-#   - Si use_chaos es True, usar CHAOS_ENDPOINTS
-#   - Si use_chaos es False, usar PROVIDER_ENDPOINTS
-#   - Usar httpx.AsyncClient con timeout
-#   - Capturar errores y relanzar como excepciones de Triton
-#   - Agregar notas con add_note()
+# Endpoints de caos para el escenario de chaos testing
+CHAOS_ENDPOINTS: Dict[str, str] = {
+    "TIMEOUT_TRIGGER": "https://httpbin.org/delay/3",
+    "BAD_GATEWAY_TRIGGER": "https://httpbin.org/status/504",
+    "CORRUPTED_TRIGGER": "https://httpbin.org/xml",
+}
 
-# TODO: Crear funcion async query_provider_telemetry(provider: str, timeout: float, use_chaos: bool = False) -> dict
 
-# FUNCION 2: scan_all_providers
-# - Recibe: providers (list), timeout (float), use_chaos (bool)
-# - Retorna: list de dicts (resultados de cada proveedor)
-# - Lanza: ExceptionGroup (si multiples fallas)
-# - Reglas:
-#   - Usar asyncio.gather(*tasks, return_exceptions=True)
-#   - Recolectar excepciones en una lista
-#   - Crear ExceptionGroup manual: raise ExceptionGroup("msg", errors)
-#   - Retornar lista de resultados exitosos
+async def query_provider_telemetry(
+    provider: str, timeout: float, use_chaos: bool = False
+) -> dict:
+    """Consulta la telemetria de un unico proveedor cloud (normal o chaos)."""
+    # Seleccion de endpoint segun modo
+    if use_chaos:
+        # En modo caos, el proveedor no importa: todos caen en endpoints de fallo
+        endpoint_keys = {"AWS": "TIMEOUT_TRIGGER", "Azure": "BAD_GATEWAY_TRIGGER", "GCP": "CORRUPTED_TRIGGER"}
+        url = CHAOS_ENDPOINTS[endpoint_keys[provider]]
+    else:
+        url = PROVIDER_ENDPOINTS[provider]
 
-# TODO: Crear funcion async scan_all_providers(providers: list, timeout: float, use_chaos: bool = False) -> list
+    start = time.perf_counter()
+
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        try:
+            response = await client.get(url)
+            # Estado HTTP 4xx/5xx se traduce a error de red/peering
+            if response.status_code >= 400:
+                raise httpx.HTTPStatusError(
+                    f"HTTP {response.status_code}",
+                    request=response.request,
+                    response=response,
+                )
+            payload = response.json()
+        except httpx.TimeoutException as err:
+            err.add_note(f"[FORENSE] Timeout en proveedor '{provider}'")
+            raise ProviderTimeoutError(
+                f"El proveedor '{provider}' tardo demasiado ({timeout}s)."
+            ) from err
+        except httpx.HTTPStatusError as err:
+            err.add_note(f"[FORENSE] HTTP {err.response.status_code} desde '{provider}'")
+            raise NetworkPeeringError(
+                f"Fallo de red/DNS en '{provider}' (HTTP {err.response.status_code})."
+            ) from err
+        except httpx.RequestError as err:
+            err.add_note(f"[FORENSE] Error de red en '{provider}': {err}")
+            raise NetworkPeeringError(
+                f"Fallo de conexion con '{provider}'."
+            ) from err
+        except json.JSONDecodeError as err:
+            err.add_note(f"[FORENSE] Payload corrupto desde '{provider}'")
+            raise CorruptedPayloadError(
+                f"Respuesta corrupta o JSON invalido desde '{provider}'."
+            ) from err
+
+    latency_sec = time.perf_counter() - start
+
+    return {
+        "provider": provider,
+        "status": "OK",
+        "latency_sec": latency_sec,
+        "payload_id": payload.get("id"),
+    }
+
+
+async def scan_all_providers(
+    providers: list, timeout: float, use_chaos: bool = False
+) -> list:
+    """Orquesta consultas paralelas a varios proveedores y agrupa errores."""
+    tasks = [
+        query_provider_telemetry(provider, timeout, use_chaos)
+        for provider in providers
+    ]
+
+    # gather con return_exceptions=True NO cancela las demas tareas al fallar una,
+    # de modo que se recolectan todas las excepciones (patron del Lab 3).
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    errors = [r for r in results if isinstance(r, Exception)]
+    success = [r for r in results if not isinstance(r, Exception)]
+
+    if errors:
+        raise ExceptionGroup(
+            "Anomalias criticas detectadas durante el escaneo multicloud.",
+            errors,
+        )
+
+    return success
