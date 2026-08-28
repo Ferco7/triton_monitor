@@ -26,30 +26,68 @@ def gzip_rotator(source: str, dest: str):
 
 # --- Formateador JSON (Mauricio Mamani) ---
 class AsyncJSONFormatter(logging.Formatter):
-    """Formateador JSON recursivo para serializar ExceptionGroups y trazas."""
+    """
+    Formateador JSON de nivel productivo capaz de serializar tracebacks,
+    estructuras complejas recursivas y metadatos dinámicos.
+    """
+
+    #Control de objetos no serializables 
+    @staticmethod
+    def _json_default(value: Any) -> str:
+        """Convierte datetimes a ISO 8601 UTC estricto (con Z), y el resto a texto."""
+        if isinstance(value, datetime):
+            if value.tzinfo is None:
+                dt_utc = value.replace(tzinfo=timezone.utc)
+            else:
+                dt_utc = value.astimezone(timezone.utc)
+            
+            return dt_utc.isoformat().replace("+00:00", "Z")
+            
+        return str(value)
 
     def _serialize_exception(self, exc: BaseException) -> Dict[str, Any]:
-        """Estructura recursivamente una excepción y sus causas/notas."""
+        """Estructura recursivamente excepciones, notas y causas."""
         exc_data: Dict[str, Any] = {
             "class": exc.__class__.__name__,
             "message": str(exc),
-            "notes": getattr(exc, "__notes__", [])
+            "notes": list(getattr(exc, "__notes__", []))
         }
 
-        # Si es un ExceptionGroup, serializa sus excepciones anidadas
-        if isinstance(exc, ExceptionGroup):
-            exc_data["nested_exceptions"] = [
-                self._serialize_exception(nested_err) for nested_err in exc.exceptions
-            ]
+        # Extracción de httpx envuelta en try/except para
+        # evitar el RuntimeError al acceder a .request
+        if exc.__class__.__module__.startswith("httpx"):
+            try:
+                request = getattr(exc, "request", None)
+                if request:
+                    exc_data["httpx_request"] = {
+                        "method": getattr(request, "method", None),
+                        "url": str(getattr(request, "url", ""))
+                    }
+                response = getattr(exc, "response", None)
+                if response:
+                    exc_data["httpx_response"] = {
+                        "status_code": getattr(response, "status_code", None),
+                        "reason_phrase": getattr(response, "reason_phrase", None),
+                        "url": str(getattr(response, "url", ""))
+                    }
+            # Si httpx colapsa al leer la propiedad, simplemente la ignoramos
+            except RuntimeError:
+                pass  
 
-        # Si tiene una causa (raise ... from), serialízala
-        if exc.__cause__:
+        # Control para ExceptionGroup
+        if isinstance(exc, BaseExceptionGroup):
+            exc_data["nested_exceptions"] = [
+                self._serialize_exception(nested_err)
+                for nested_err in exc.exceptions
+            ]
+          
+        # ExceptionGroup también puede tener una causa raíz (__cause__).
+        if getattr(exc, "__cause__", None):
             exc_data["cause"] = self._serialize_exception(exc.__cause__)
 
         return exc_data
 
     def format(self, record: logging.LogRecord) -> str:
-        # Timestamp ISO 8601 UTC
         dt_utc = datetime.fromtimestamp(record.created, tz=timezone.utc)
 
         log_payload: Dict[str, Any] = {
@@ -57,33 +95,39 @@ class AsyncJSONFormatter(logging.Formatter):
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),
-            "async_task": getattr(record, "taskName", None),
-            "thread_name": record.threadName,
             "process": record.process,
+            "threadName": record.threadName,
+            "async_task": getattr(record, "taskName", None),
             "filename": record.filename,
             "line": record.lineno
         }
 
-        # Serializa el árbol de excepciones si existe
         if record.exc_info:
             exc_type, exc_value, exc_tb = record.exc_info
             if exc_value:
-                log_payload["exception_tree"] = self._serialize_exception(exc_value)
-                log_payload["stack_trace"] = self.formatException(record.exc_info)
+                log_payload["exception_tree"] = self._serialize_exception(
+                    exc_value
+                )
+                log_payload["stack_trace"] = self.formatException(
+                    record.exc_info
+                )
 
-        # Captura metadatos dinámicos del parámetro 'extra'
         reserved_fields = {
-            "name", "msg", "args", "levelname", "levelno", "pathname", "filename",
-            "module", "exc_info", "exc_text", "stack_info", "lineno", "funcName",
-            "created", "msecs", "relativeCreated", "thread", "threadName",
-            "processName", "process", "message", "taskName"
+            "name", "msg", "args", "levelname", "levelno", "pathname",
+            "filename", "module", "exc_info", "exc_text", "stack_info",
+            "lineno", "funcName", "created", "msecs", "relativeCreated",
+            "thread", "threadName", "processName", "process", "message",
+            "taskName"
         }
+
         for key, value in record.__dict__.items():
             if key not in reserved_fields and not key.startswith('_'):
-                log_payload[key] = value
+                if key in log_payload:
+                    log_payload.setdefault("extra", {})[key] = value
+                else:
+                    log_payload[key] = value
 
-        return json.dumps(log_payload, ensure_ascii=False)
-
+        return json.dumps(log_payload, ensure_ascii=False, default=self._json_default)
 
 # --- Pipeline No Bloqueante (Facundo Alegre) ---
 def setup_triton_logging(log_filename: str = "triton_services.log") -> logging.Logger:
