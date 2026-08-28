@@ -18,7 +18,7 @@ from triton_telemetry import(
 )
 
 #Proveedores cloud soportados
-VALID_PROVIDERS = ("AWS", "AZURE", "GCP")
+VALID_PROVIDERS = ("AWS", "Azure", "GCP")
 
 def build_cli_parser() -> argparse.ArgumentParser:
     """Configura y retorna el parser de argumetos CLI de TritomMonitor."""
@@ -105,20 +105,20 @@ async def async_main() -> None:
                 logger.error(f"   -> [FORENSE TRITON] {note}")
     
     except* NetworkPeeringError as group:
-            had_failures = True
-            logger.error(f"ANOMALIA: fallos de red/DNS/routing ({len(group.exceptions)} incidente/s): ")
-            for exc in group.exceptions:
-                logger.error(f" Fallo: {exc}")
-                for note in getattr(exc, "__notes__", []):
-                    logger.error(f"   -> [FORENSE TRITON] {note}")
+        had_failures = True
+        logger.error(f"ANOMALIA: fallos de red/DNS/routing ({len(group.exceptions)} incidente/s): ")
+        for exc in group.exceptions:
+            logger.error(f" Fallo: {exc}")
+            for note in getattr(exc, "__notes__", []):
+                logger.error(f"   -> [FORENSE TRITON] {note}")
                     
     except* CorruptedPayloadError as group:
-            had_failures = True
-            logger.error(f"ADVERTENCIA: payloads o estatus HTTP corruptos ({len(group.exceptions)} incidente/s): ")
-            for exc in group.exceptions:
-                logger.error(f" Fallo: {exc}")
-                for note in getattr(exc, "__notes__", []):
-                    logger.error(f"   -> [FORENSE TRITON] {note}")
+        had_failures = True
+        logger.error(f"ADVERTENCIA: payloads o estatus HTTP corruptos ({len(group.exceptions)} incidente/s): ")
+        for exc in group.exceptions:
+            logger.error(f" Fallo: {exc}")
+            for note in getattr(exc, "__notes__", []):
+                logger.error(f"   -> [FORENSE TRITON] {note}")
     
     except* TritonError as group:
         had_failures = True
