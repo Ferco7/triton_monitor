@@ -67,7 +67,7 @@ async def async_main() -> None:
     args = parser.parse_args()
     
     #Logger configurado segun modo
-    logger = setup_triton_logging(mode=args.mode)
+    logger = setup_triton_logging()
     had_failures = False
     
     #Encabezado del monitoreo
