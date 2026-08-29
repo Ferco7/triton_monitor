@@ -7,20 +7,24 @@ responsable: integrante 2
 import asyncio
 import json
 import time
-import httpx
-from typing import Any, Dict
-from .exceptions import ProviderTimeoutError, CorruptedPayloadError, NetworkPeeringError
 
+import httpx
+
+from .exceptions import (
+    CorruptedPayloadError,
+    NetworkPeeringError,
+    ProviderTimeoutError,
+)
 
 # Proveedores cloud soportados (nombres alineados con app_operator.py)
-PROVIDER_ENDPOINTS: Dict[str, str] = {
+PROVIDER_ENDPOINTS: dict[str, str] = {
     "AWS": "https://jsonplaceholder.typicode.com/posts/1",
     "Azure": "https://jsonplaceholder.typicode.com/posts/2",
     "GCP": "https://jsonplaceholder.typicode.com/posts/3",
 }
 
 # Endpoints de caos para el escenario de chaos testing
-CHAOS_ENDPOINTS: Dict[str, str] = {
+CHAOS_ENDPOINTS: dict[str, str] = {
     "TIMEOUT_TRIGGER": "https://httpbin.org/delay/3",
     "BAD_GATEWAY_TRIGGER": "https://httpbin.org/status/504",
     "CORRUPTED_TRIGGER": "https://httpbin.org/xml",
