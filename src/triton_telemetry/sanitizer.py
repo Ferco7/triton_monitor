@@ -1,7 +1,7 @@
 import argparse
 import re
 
-def validar_timeout(value: str) -> float:
+def parse_timeout(value: str) -> float:
     """Valida y restringe el parametro --timeout de 0.1 a 5.0 segundos."""
     try:
         val = float(value)
@@ -13,7 +13,7 @@ def validar_timeout(value: str) -> float:
     
     return val
 
-def validar_cluster_id(cluster_id: str) -> str:
+def parse_cluster_id(cluster_id: str) -> str:
     """Valida mediante expresiones regulares el formato cluster-<region>-<numero>."""
     patron = r"^cluster-[a-z-]+-\d{2}$"
     if not re.match(patron, cluster_id):
