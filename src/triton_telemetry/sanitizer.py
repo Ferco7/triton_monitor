@@ -15,7 +15,7 @@ def parse_timeout(value: str) -> float:
 
 def parse_cluster_id(cluster_id: str) -> str:
     """Valida mediante expresiones regulares el formato cluster-<region>-<numero>."""
-    patron = r"^cluster-[a-z-]+-\d{2}$"
+    patron = r"^cluster-[a-z]{2,10}-[a-z]+-\d{2}$"
     if not re.match(patron, cluster_id):
         raise argparse.ArgumentTypeError(f"El identificador de cluster '{cluster_id}' no cumple con el patrón requerido 'cluster-<region>-<numero>'.")
     return cluster_id
