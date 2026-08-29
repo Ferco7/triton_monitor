@@ -63,8 +63,8 @@ async def query_provider_telemetry(
             ) from err
         except httpx.HTTPStatusError as err:
             err.add_note(f"[FORENSE] HTTP {err.response.status_code} desde '{provider}'")
-            raise NetworkPeeringError(
-                f"Fallo de red/DNS en '{provider}' (HTTP {err.response.status_code})."
+            raise CorruptedPayloadError(
+                f"Estatus HTTP no esperado recibido desde '{provider}' (HTTP {err.response.status_code})."
             ) from err
         except httpx.RequestError as err:
             err.add_note(f"[FORENSE] Error de red en '{provider}': {err}")
