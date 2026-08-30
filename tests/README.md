@@ -11,27 +11,27 @@ Contiene los dos scripts de validacion del proyecto Triton:
 
 ## Escenario A: Nominal
 
-- Que hace: Ejecuta el CLI con args validos y 3 proveedores
+- Que hace: Ejecuta el CLI con args validos y 2 proveedores (comando oficial de la consigna)
 - Resultado esperado: Exit code 0 y stdout con el escaneo completo
 - Aserciones sugeridas:
   - exit code == 0
   - stdout contiene "ESCANEO COMPLETADO SIN ANOMALIAS"
-  - stdout lista los 3 proveedores con estado OK
+  - stdout lista los proveedores con estado OK
 - Comando:
   ```
-  python3 src/app_operator.py AWS GCP Azure -c cluster-us-east-01 -t 3.0
+  python3 src/app_operator.py AWS GCP -c cluster-us-east-01 -t 3.0
   ```
 
 ## Escenario B: Argumentos invalidos
 
-- Que hace: Ejecuta el CLI sin argumentos
+- Que hace: Ejecuta el CLI con cluster malformado y timeout fuera de rango (9.5)
 - Resultado esperado: Exit code 2, error de argparse, NO se ejecuta asyncio
 - Aserciones sugeridas:
   - exit code == 2
-  - stderr contiene "required" (mensaje de argparse)
+  - stderr menciona "cluster-invalido-id" (mensaje del sanitizer, sin tocar red)
 - Comando:
   ```
-  python3 src/app_operator.py
+  python3 src/app_operator.py AWS GCP -c cluster-invalido-id -t 9.5
   ```
 
 ## Escenario C: Chaos
@@ -41,10 +41,11 @@ Contiene los dos scripts de validacion del proyecto Triton:
   (timeout, 504, payload corrupto)
 - Aserciones sugeridas:
   - exit code == 1
-  - stdout contiene la informacion de las 3 excepciones
+  - stdout contiene 3 lineas "Fallo:" (una por excepcion del arbol)
+  - stderr vacio
 - Comando:
   ```
-  python3 src/app_operator.py AWS GCP Azure -c cluster-us-east-01 -t 2.0 --chaos
+  python3 src/app_operator.py AWS Azure GCP -c cluster-us-west-02 -t 1.5 --chaos
   ```
 
 IMPORTANTE (correccion respecto a la plantilla original):
@@ -52,13 +53,15 @@ IMPORTANTE (correccion respecto a la plantilla original):
 - Los logs del monitoreo salen por STDOUT (handler de consola). El STDOUT
   debe validarse para el escenario C; stderr queda vacio porque el
   ExceptionGroup se captura con except* y no propaga a la salida de error.
-- Usar `-t 2.0` en caos para que el timeout contra `httpbin.org/delay/3` se
-  dispare de forma garantizada. Con `-t 3.0` exactos es una carrera contra
-  el endpoint (que tarda ~3 segundos).
-- Las notas forenses (`[FORENSE ...]`) NO se imprimen como lineas en stdout:
-  `core.py` las agrega a la excepcion httpx causante (`add_note`) y viajan
-  dentro del nodo `exception_tree` del log. No asertarlas en stdout; si en
-  el arbol del registro (validador forense).
+- Usar `-t 1.5` en caos: contra `httpbin.org/delay/3` (tarda ~3 segundos)
+  el timeout se dispara de forma garantizada y `asyncio.gather` no cancela
+  las demas tareas, asi se materializan las 3 categorias (timeout, 504 y
+  payload corrupto). Con `-t 3.0` exactos es una carrera contra el endpoint.
+- Las notas forenses (`[FORENSE ...]`) viajan dentro del nodo
+  `exception_tree` del log; en consola aparecen como anotaciones del
+  traceback (Python 3.11+). El check robusto de stdout es contar las
+  lineas "Fallo:"; las notas se asertan en el arbol del registro
+  (validador forense).
 
 ## Validador forense (test_forensic_validator.py)
 

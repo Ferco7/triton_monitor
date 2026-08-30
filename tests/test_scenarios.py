@@ -36,10 +36,10 @@ REGLAS:
 # CLI_PATH = os.path.join("src", "app_operator.py")
 
 # ============================================================
-# ESCENARIO A: NOMINAL
-# Ejecuta el CLI con args validos y 3 proveedores
+# ESCENARIO A: NOMINAL (comando oficial de la consigna)
+# Ejecuta el CLI con args validos y 2 proveedores
 # Resultado esperado: Exit code 0, resultados en stdout
-# Comando: python3 src/app_operator.py AWS GCP Azure -c cluster-us-east-01 -t 3.0
+# Comando: python3 src/app_operator.py AWS GCP -c cluster-us-east-01 -t 3.0
 #
 # Reglas:
 # - Ejecutar con subprocess.run()
@@ -53,14 +53,14 @@ REGLAS:
 # - Retorna True si pass, False si fail
 
 # ============================================================
-# ESCENARIO B: ARGUMENTOS INVALIDOS
-# Ejecuta el CLI sin argumentos
-# Resultado esperado: Exit code 2, error de argparse
-# Comando: python3 src/app_operator.py (sin argumentos)
+# ESCENARIO B: ARGUMENTOS INVALIDOS (comando oficial de la consigna)
+# Ejecuta el CLI con cluster malformado y timeout fuera de rango (9.5)
+# Resultado esperado: Exit code 2, error de argparse (frontera CLI)
+# Comando: python3 src/app_operator.py AWS GCP -c cluster-invalido-id -t 9.5
 #
 # Reglas:
-# - Ejecutar sin argumentos adicionales
 # - Validar que exit code sea 2 (argparse error)
+# - Validar que stderr mencione el cluster invalido (mensaje de sanitizer)
 # - Validar que NO se ejecute asyncio (no hay llamadas HTTP)
 # ============================================================
 
@@ -69,10 +69,10 @@ REGLAS:
 # - Retorna True si pass, False si fail
 
 # ============================================================
-# ESCENARIO C: CHAOS
+# ESCENARIO C: CHAOS (comando oficial de la consigna)
 # Ejecuta el CLI con los 3 proveedores en modo caos
 # Resultado esperado: Exit code 1, ExceptionGroup con 3 excepciones
-# Comando: python3 src/app_operator.py AWS GCP Azure -c cluster-us-east-01 -t 2.0 --chaos
+# Comando: python3 src/app_operator.py AWS Azure GCP -c cluster-us-west-02 -t 1.5 --chaos
 #
 # Reglas:
 # - Ejecutar con flag --chaos
@@ -80,8 +80,9 @@ REGLAS:
 # - Validar que STDOUT contenga informacion de las 3 excepciones
 #   (los logs del monitoreo salen por stdout; stderr queda vacio porque
 #    el ExceptionGroup se captura con except* y no propaga)
-# - NOTA: usar -t 2.0 para que el timeout de httpbin.org/delay/3 se dispare
-#   de forma garantizada (con 3.0 exactos es una carrera contra el endpoint)
+# - NOTA: usar -t 1.5 para que el timeout de httpbin.org/delay/3 (tarda ~3s)
+#   se dispare de forma garantizada y llegar a las 3 categorias (timeout,
+#   504 y payload corrupto). gather no cancela ninguna tarea al fallar.
 # ============================================================
 
 # TODO: Crear funcion test_scenario_chaos() -> bool
