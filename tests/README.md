@@ -3,10 +3,13 @@
 responsable: integrante 6
 
 ESTADO: implementado y verificado (PR #7). Los 3 escenarios y las 3
-validaciones forenses pasan en Python 3.11 y 3.14:
+validaciones forenses pasan en Python 3.11 y 3.14, incluida la verificacion
+final en clon limpio siguiendo el flujo del README raiz:
 
-- `python tests/test_scenarios.py`          -> 3/3 pasan
-- `python tests/test_forensic_validator.py` -> 3/3 pasan
+- `python3 tests/test_scenarios.py`          -> 3/3 pasan
+- `python3 tests/test_forensic_validator.py` -> 3/3 pasan
+
+(en Windows usar `python` en lugar de `python3`)
 
 ## Que es esta carpeta
 
@@ -19,10 +22,10 @@ Contiene los dos scripts de validacion del proyecto Triton:
 
 - Que hace: Ejecuta el CLI con args validos y 2 proveedores (comando oficial de la consigna)
 - Resultado esperado: Exit code 0 y stdout con el escaneo completo
-- Aserciones sugeridas:
+- Aserciones implementadas:
   - exit code == 0
   - stdout contiene "ESCANEO COMPLETADO SIN ANOMALIAS"
-  - stdout lista los proveedores con estado OK
+  - cada proveedor seleccionado (AWS, GCP) figura en stdout
 - Comando:
   ```
   python3 src/app_operator.py AWS GCP -c cluster-us-east-01 -t 3.0
@@ -32,9 +35,10 @@ Contiene los dos scripts de validacion del proyecto Triton:
 
 - Que hace: Ejecuta el CLI con cluster malformado y timeout fuera de rango (9.5)
 - Resultado esperado: Exit code 2, error de argparse, NO se ejecuta asyncio
-- Aserciones sugeridas:
+- Aserciones implementadas:
   - exit code == 2
   - stderr menciona "cluster-invalido-id" (mensaje del sanitizer, sin tocar red)
+  - stdout vacio (no se llego a ejecutar asyncio)
 - Comando:
   ```
   python3 src/app_operator.py AWS GCP -c cluster-invalido-id -t 9.5
@@ -45,7 +49,7 @@ Contiene los dos scripts de validacion del proyecto Triton:
 - Que hace: Ejecuta el CLI con los 3 proveedores en modo caos
 - Resultado esperado: Exit code 1, ExceptionGroup con 3 excepciones
   (timeout, 504, payload corrupto)
-- Aserciones sugeridas:
+- Aserciones implementadas:
   - exit code == 1
   - stdout contiene 3 lineas "Fallo:" (una por excepcion del arbol)
   - stderr vacio
@@ -63,6 +67,8 @@ IMPORTANTE (correccion respecto a la plantilla original):
   el timeout se dispara de forma garantizada y `asyncio.gather` no cancela
   las demas tareas, asi se materializan las 3 categorias (timeout, 504 y
   payload corrupto). Con `-t 3.0` exactos es una carrera contra el endpoint.
+  El validador forense corre el caos con `-t 2.0`, igualmente garantizado
+  (2.0s < ~3s del endpoint).
 - Las notas forenses (`[FORENSE ...]`) viajan dentro del nodo
   `exception_tree` del log; en consola aparecen como anotaciones del
   traceback (Python 3.11+). El check robusto de stdout es contar las
@@ -96,9 +102,9 @@ python3 tests/test_scenarios.py
 python3 tests/test_forensic_validator.py
 ```
 
-Los scripts resuelven la raiz del proyecto de forma relativa a `__file__`
-y ejecutan el CLI con `cwd=PROJECT_ROOT`, asi que tambien funcionan desde
-cualquier carpeta.
+En Windows reemplazar `python3` por `python`. Los scripts resuelven la raiz
+del proyecto de forma relativa a `__file__` y ejecutan el CLI con
+`cwd=PROJECT_ROOT`, asi que tambien funcionan desde cualquier carpeta.
 
 ## Reglas
 

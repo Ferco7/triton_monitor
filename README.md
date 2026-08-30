@@ -60,13 +60,32 @@ python3 src/app_operator.py AWS Azure GCP -c cluster-us-west-02 -t 1.5 --chaos
 #   Salida esperada: exit 1, 3 anomalias (timeout, 504, payload corrupto).
 ```
 
+Cada corrida genera `triton_services.log` (una linea JSON por registro) en el
+directorio de trabajo y, al rotar, backups comprimidos `.gz`; el archivo esta
+ignorado por git.
+
 Los tests automatizados (escenarios A/B/C y validador forense) se documentan
 en `tests/README.md`.
 
+## Estado del Proyecto
+
+| Componente                                           | Estado        | Referencia            |
+| ---------------------------------------------------- | ------------- | --------------------- |
+| Roles 1-5 integrados (excepciones, CLI, asyncio, JSON, pipeline) | Completo | historial `main` |
+| Req 4: `exception_tree` serializado en el log JSON   | Completo      | `TritonQueueHandler`  |
+| Consola compatible Python 3.11 (campo `taskName` fuera del formato) | Completo | commit `db3e2ce` |
+| Rol 6: suite de escenarios y validador forense       | Completo (6/6) | PR #7 (`687b65b`) |
+| Verificacion en clon limpio (flujo del README)       | Completo      | Python 3.11 y 3.14    |
+
+La suite automatizada (`test_scenarios.py` 3/3 y `test_forensic_validator.py`
+3/3) pasa en Python 3.11 y 3.14. Pendiente: la grabacion del video de defensa
+por rol.
+
 ## Evidencia de Ejecucion
 
-Capturas reales de una corrida local. Las salidas de consola se acortaron por
-legibilidad: el stack_trace completo queda serializado en `triton_services.log`.
+Capturas reales de una corrida local (verificado en Python 3.11 y 3.14). Las
+salidas de consola se acortaron por legibilidad: el stack_trace completo queda
+serializado en `triton_services.log`.
 
 | Escenario A - Operacion nominal         | Escenario B - Argumentos invalidos      |
 | --------------------------------------- | --------------------------------------- |
@@ -173,6 +192,7 @@ Pipeline no bloqueante:
 - `RotatingFileHandler` acotado a 2 MB con hasta 3 backups.
 - Callbacks `namer`/`rotator` de gzip: el historial rotado se comprime a `.gz` y se elimina el archivo plano residual.
 - `TritonQueueHandler` (subclase) preserva `exc_info` a traves de la cola, materializando el `exception_tree` en el log.
+- Formatter de consola compatible con Python 3.11+: no usa el campo `taskName` del `LogRecord` (incorporado recien en Python 3.12); el nombre de la tarea se preserva en el JSON via `async_task`.
 
 ### app_operator.py (Rol 5) + __init__.py
 
@@ -186,4 +206,6 @@ Punto de entrada CLI:
 
 ### tests/ (Rol 6)
 
-Suite de validacion documentada en `tests/README.md`: escenarios A/B/C del CLI (exit codes y salida) + validador forense del log JSON y de la descompresion gzip.
+Suite de validacion implementada y verificada (PR #7, 6/6 en Python 3.11 y
+3.14), documentada en `tests/README.md`: escenarios A/B/C del CLI (exit codes
+y salida) + validador forense del log JSON y de la descompresion gzip.
