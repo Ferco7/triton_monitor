@@ -55,10 +55,19 @@ IMPORTANTE (correccion respecto a la plantilla original):
 - Usar `-t 2.0` en caos para que el timeout contra `httpbin.org/delay/3` se
   dispare de forma garantizada. Con `-t 3.0` exactos es una carrera contra
   el endpoint (que tarda ~3 segundos).
+- Las notas forenses (`[FORENSE ...]`) NO se imprimen como lineas en stdout:
+  `core.py` las agrega a la excepcion httpx causante (`add_note`) y viajan
+  dentro del nodo `exception_tree` del log. No asertarlas en stdout; si en
+  el arbol del registro (validador forense).
 
 ## Validador forense (test_forensic_validator.py)
 
 Debe verificar sobre `triton_services.log` (generado por una corrida de caos):
+
+0. IMPORTANTE: el RotatingFileHandler abre en modo append, por lo que
+   `triton_services.log` acumula corridas. Antes de validar, eliminar el
+   archivo previo (o regenerarlo) y asertar "al menos N" arboles, no un
+   conteo exacto.
 
 1. Esquema base por linea JSON: timestamp (ISO 8601 UTC terminado en Z),
    level, logger, message, process, threadName, async_task, filename, line.
