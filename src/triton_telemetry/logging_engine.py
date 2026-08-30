@@ -5,6 +5,7 @@ import logging
 import logging.config
 import logging.handlers
 import queue
+import copy
 import os
 import gzip
 import shutil
@@ -130,6 +131,16 @@ class AsyncJSONFormatter(logging.Formatter):
         return json.dumps(log_payload, ensure_ascii=False, default=self._json_default)
 
 # --- Pipeline No Bloqueante (Facundo Alegre) ---
+class TritonQueueHandler(logging.handlers.QueueHandler):
+    """QueueHandler que conserva exc_info para que el formatter JSON del
+    listener pueda serializar el exception_tree (el base lo descarta)."""
+    def prepare(self, record):
+        record = copy.copy(record)
+        record.message = record.getMessage()
+        record.msg = record.message
+        record.args = None
+        return record
+
 def setup_triton_logging(log_filename: str = "triton_services.log") -> logging.Logger:
     """Configura el logging con QueueHandler y QueueListener."""
 
@@ -180,7 +191,7 @@ def setup_triton_logging(log_filename: str = "triton_services.log") -> logging.L
 
     # --- Desacoplamiento no bloqueante con Queue ---
     log_queue = queue.Queue(-1)
-    queue_handler = logging.handlers.QueueHandler(log_queue)
+    queue_handler = TritonQueueHandler(log_queue)
 
     # Tomamos los handlers síncronos y se los pasamos al listener
     real_handlers = app_logger.handlers

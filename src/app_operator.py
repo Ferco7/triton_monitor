@@ -100,7 +100,7 @@ async def async_main() -> None:
         had_failures = True
         logger.error(f"ANOMALIA: timeouts en proveedores cloud ({len(group.exceptions)} incidente/s): ")
         for exc in group.exceptions:
-            logger.error(f" Fallo: {exc}")
+            logger.error(f" Fallo: {exc}", exc_info=(type(exc), exc, exc.__traceback__))
             for note in getattr(exc, "__notes__", []):
                 logger.error(f"   -> [FORENSE TRITON] {note}")
     
@@ -108,7 +108,7 @@ async def async_main() -> None:
         had_failures = True
         logger.error(f"ANOMALIA: fallos de red/DNS/routing ({len(group.exceptions)} incidente/s): ")
         for exc in group.exceptions:
-            logger.error(f" Fallo: {exc}")
+            logger.error(f" Fallo: {exc}", exc_info=(type(exc), exc, exc.__traceback__))
             for note in getattr(exc, "__notes__", []):
                 logger.error(f"   -> [FORENSE TRITON] {note}")
                     
@@ -116,7 +116,7 @@ async def async_main() -> None:
         had_failures = True
         logger.error(f"ADVERTENCIA: payloads o estatus HTTP corruptos ({len(group.exceptions)} incidente/s): ")
         for exc in group.exceptions:
-            logger.error(f" Fallo: {exc}")
+            logger.error(f" Fallo: {exc}", exc_info=(type(exc), exc, exc.__traceback__))
             for note in getattr(exc, "__notes__", []):
                 logger.error(f"   -> [FORENSE TRITON] {note}")
     
@@ -124,7 +124,7 @@ async def async_main() -> None:
         had_failures = True
         logger.error(f"ERROR OPERACIONAL: fallo imprevisto en triton ({len(group.exceptions)} incidente/s): ")
         for exc in group.exceptions:
-            logger.error(f" Fallo: {exc}")
+            logger.error(f" Fallo: {exc}", exc_info=(type(exc), exc, exc.__traceback__))
     
     finally:
         # PEP 765 / Python 3.11+: solo liberacion de recursos, sin return/break/continue
