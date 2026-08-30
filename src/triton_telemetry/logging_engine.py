@@ -150,7 +150,7 @@ def setup_triton_logging(log_filename: str = "triton_services.log") -> logging.L
         "formatters": {
             "json_structured": {"()": AsyncJSONFormatter},
             "console_clean": {
-                "format": "%(asctime)s [%(levelname)s] (%(taskName)s) %(message)s",
+                "format": "%(asctime)s [%(levelname)s] %(message)s",
                 "datefmt": "%H:%M:%S"
             }
         },
