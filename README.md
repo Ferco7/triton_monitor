@@ -28,6 +28,7 @@
 
 - Python 3.11+
 - httpx>=0.27.0
+- Conexion a internet (los escenarios consultan APIs reales: jsonplaceholder y httpbin)
 
 ## Instalacion
 
@@ -59,6 +60,9 @@ python3 src/app_operator.py AWS Azure GCP -c cluster-us-west-02 -t 1.5 --chaos
 #   Salida esperada: exit 1, 3 anomalias (timeout, 504, payload corrupto).
 ```
 
+Los tests automatizados (escenarios A/B/C y validador forense) se documentan
+en `tests/README.md`.
+
 ## Evidencia de Ejecucion
 
 Capturas reales de una corrida local. Las salidas de consola se acortaron por
@@ -68,7 +72,7 @@ legibilidad: el stack_trace completo queda serializado en `triton_services.log`.
 | --------------------------------------- | --------------------------------------- |
 | ![nominal](docs/images/nominal.png)     | ![invalidos](docs/images/invalidos.png) |
 
-| Escenario C - Inyeccion de caos         | Log forense JSON (arbol + gzip)         |
+| Escenario C - Inyeccion de caos         | Log forense JSON (arbol, 504 y notas)  |
 | --------------------------------------- | --------------------------------------- |
 | ![caos](docs/images/caos.png)           | ![log forense](docs/images/log_forense.png) |
 
@@ -120,6 +124,8 @@ triton_monitor/
 │   │   ├── core.py              # Logica asincrona de red
 │   │   └── logging_engine.py    # Formateador JSON y pipeline
 │   └── app_operator.py          # Punto de entrada CLI
+├── docs/
+│   └── images/                  # Evidencias de ejecucion (capturas)
 ├── tests/
 │   ├── README.md                # Instrucciones para tests
 │   ├── test_scenarios.py        # Escenarios de simulacion de caos
