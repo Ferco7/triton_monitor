@@ -2,6 +2,12 @@
 
 responsable: integrante 6
 
+ESTADO: implementado y verificado (PR #7). Los 3 escenarios y las 3
+validaciones forenses pasan en Python 3.11 y 3.14:
+
+- `python tests/test_scenarios.py`          -> 3/3 pasan
+- `python tests/test_forensic_validator.py` -> 3/3 pasan
+
 ## Que es esta carpeta
 
 Contiene los dos scripts de validacion del proyecto Triton:
@@ -89,6 +95,10 @@ Debe verificar sobre `triton_services.log` (generado por una corrida de caos):
 python3 tests/test_scenarios.py
 python3 tests/test_forensic_validator.py
 ```
+
+Los scripts resuelven la raiz del proyecto de forma relativa a `__file__`
+y ejecutan el CLI con `cwd=PROJECT_ROOT`, asi que tambien funcionan desde
+cualquier carpeta.
 
 ## Reglas
 
