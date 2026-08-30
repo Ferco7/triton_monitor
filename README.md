@@ -31,16 +31,32 @@
 
 ## Instalacion
 
+Se recomienda un entorno virtual para aislar las dependencias del proyecto (httpx):
+
 ```bash
 git clone https://github.com/Ferco7/triton_monitor.git
 cd triton_monitor
+python3 -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
 ## Ejecucion
 
+Con el entorno activado, los escenarios oficiales de la consigna:
+
 ```bash
+# Escenario A - Operacion nominal
 python3 src/app_operator.py AWS GCP -c cluster-us-east-01 -t 3.0
+#   Salida esperada: exit 0, escaneo completo sin anomalias.
+
+# Escenario B - Argumentos invalidos (frontera CLI, no inicia asyncio)
+python3 src/app_operator.py AWS GCP -c cluster-invalido-id -t 9.5
+#   Salida esperada: exit 2, error de argparse.
+
+# Escenario C - Inyeccion de caos (fallos concurrentes)
+python3 src/app_operator.py AWS Azure GCP -c cluster-us-west-02 -t 1.5 --chaos
+#   Salida esperada: exit 1, 3 anomalias (timeout, 504, payload corrupto).
 ```
 
 ## Diagrama de Arquitectura
