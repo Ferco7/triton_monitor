@@ -4,39 +4,78 @@ responsable: integrante 6
 
 ## Que es esta carpeta
 
-Esta carpeta contiene los scripts de validacion del proyecto Triton.
-Cada escenario prueba un comportamiento diferente del CLI.
+Contiene los dos scripts de validacion del proyecto Triton:
 
-## Escenarios
+- `test_scenarios.py`: suite de los 3 escenarios del CLI (exit codes y salida).
+- `test_forensic_validator.py`: validador forense del log JSON + gzip.
 
-### Escenario A: Nominal
+## Escenario A: Nominal
+
 - Que hace: Ejecuta el CLI con args validos y 3 proveedores
-- Resultado esperado: Exit code 0, resultados impressos en stdout
+- Resultado esperado: Exit code 0 y stdout con el escaneo completo
+- Aserciones sugeridas:
+  - exit code == 0
+  - stdout contiene "ESCANEO COMPLETADO SIN ANOMALIAS"
+  - stdout lista los 3 proveedores con estado OK
 - Comando:
   ```
   python3 src/app_operator.py AWS GCP Azure -c cluster-us-east-01 -t 3.0
   ```
 
-### Escenario B: Argumentos invalidos
+## Escenario B: Argumentos invalidos
+
 - Que hace: Ejecuta el CLI sin argumentos
 - Resultado esperado: Exit code 2, error de argparse, NO se ejecuta asyncio
+- Aserciones sugeridas:
+  - exit code == 2
+  - stderr contiene "required" (mensaje de argparse)
 - Comando:
   ```
   python3 src/app_operator.py
   ```
 
-### Escenario C: Chaos
+## Escenario C: Chaos
+
 - Que hace: Ejecuta el CLI con los 3 proveedores en modo caos
-- Resultado esperado: Exit code 1, ExceptionGroup con 3 excepciones (timeout, 504, corrupted)
+- Resultado esperado: Exit code 1, ExceptionGroup con 3 excepciones
+  (timeout, 504, payload corrupto)
+- Aserciones sugeridas:
+  - exit code == 1
+  - stdout contiene la informacion de las 3 excepciones
 - Comando:
   ```
-  python3 src/app_operator.py AWS GCP Azure -c cluster-us-east-01 -t 3.0 --chaos
+  python3 src/app_operator.py AWS GCP Azure -c cluster-us-east-01 -t 2.0 --chaos
   ```
 
-## Como ejecutar
+IMPORTANTE (correccion respecto a la plantilla original):
+
+- Los logs del monitoreo salen por STDOUT (handler de consola). El STDOUT
+  debe validarse para el escenario C; stderr queda vacio porque el
+  ExceptionGroup se captura con except* y no propaga a la salida de error.
+- Usar `-t 2.0` en caos para que el timeout contra `httpbin.org/delay/3` se
+  dispare de forma garantizada. Con `-t 3.0` exactos es una carrera contra
+  el endpoint (que tarda ~3 segundos).
+
+## Validador forense (test_forensic_validator.py)
+
+Debe verificar sobre `triton_services.log` (generado por una corrida de caos):
+
+1. Esquema base por linea JSON: timestamp (ISO 8601 UTC terminado en Z),
+   level, logger, message, process, threadName, async_task, filename, line.
+2. `exception_tree` en los registros ERROR de caos: nodo recursivo con
+   class, message, notes (add_note), cause (`__cause__`) con
+   httpx_request/httpx_response (p.ej. `status_code: 504`),
+   nested_exceptions para ExceptionGroup, y stack_trace en el registro.
+3. Gzip: descompresion round-trip del log (comprimir y descomprimir debe
+   devolver el contenido original) y, si existen backups rotados
+   (`triton_services.log.N.gz`), abrirlos, descomprimirlos y parsearlos
+   como JSON por linea.
+
+## Como ejecutar (desde la raiz del proyecto)
 
 ```bash
 python3 tests/test_scenarios.py
+python3 tests/test_forensic_validator.py
 ```
 
 ## Reglas
@@ -45,5 +84,9 @@ python3 tests/test_scenarios.py
 - NO instalar dependencias nuevas
 - Python 3.11+ (requerido para ExceptionGroup y except*)
 - Windows y Linux compatibles
-- Usar subprocess.run() para ejecutar el CLI como proceso separado
-- El test es externo al paquete (no importa de src/)
+- Usar subprocess.run() con capture_output=True y text=True para ejecutar el CLI como proceso separado
+- Usar sys.executable para obtener la ruta del interprete Python
+- El test es externo al paquete (NO importar nada de src/)
+- No hardcodear rutas absolutas: usar os.path.join
+- Colores: GREEN="\033[92m", RED="\033[91m", RESET="\033[0m"
+- Timeout de 30 segundos para escenarios con red, 10 para invalid args

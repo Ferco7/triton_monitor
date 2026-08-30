@@ -72,12 +72,16 @@ REGLAS:
 # ESCENARIO C: CHAOS
 # Ejecuta el CLI con los 3 proveedores en modo caos
 # Resultado esperado: Exit code 1, ExceptionGroup con 3 excepciones
-# Comando: python3 src/app_operator.py AWS GCP Azure -c cluster-us-east-01 -t 3.0 --chaos
+# Comando: python3 src/app_operator.py AWS GCP Azure -c cluster-us-east-01 -t 2.0 --chaos
 #
 # Reglas:
 # - Ejecutar con flag --chaos
 # - Validar que exit code sea 1
-# - Validar que stderr contenga informacion de las 3 excepciones
+# - Validar que STDOUT contenga informacion de las 3 excepciones
+#   (los logs del monitoreo salen por stdout; stderr queda vacio porque
+#    el ExceptionGroup se captura con except* y no propaga)
+# - NOTA: usar -t 2.0 para que el timeout de httpbin.org/delay/3 se dispare
+#   de forma garantizada (con 3.0 exactos es una carrera contra el endpoint)
 # ============================================================
 
 # TODO: Crear funcion test_scenario_chaos() -> bool
