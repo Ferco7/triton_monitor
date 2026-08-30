@@ -59,6 +59,19 @@ python3 src/app_operator.py AWS Azure GCP -c cluster-us-west-02 -t 1.5 --chaos
 #   Salida esperada: exit 1, 3 anomalias (timeout, 504, payload corrupto).
 ```
 
+## Evidencia de Ejecucion
+
+Capturas reales de una corrida local. Las salidas de consola se acortaron por
+legibilidad: el stack_trace completo queda serializado en `triton_services.log`.
+
+| Escenario A - Operacion nominal         | Escenario B - Argumentos invalidos      |
+| --------------------------------------- | --------------------------------------- |
+| ![nominal](docs/images/nominal.png)     | ![invalidos](docs/images/invalidos.png) |
+
+| Escenario C - Inyeccion de caos         | Log forense JSON (arbol + gzip)         |
+| --------------------------------------- | --------------------------------------- |
+| ![caos](docs/images/caos.png)           | ![log forense](docs/images/log_forense.png) |
+
 ## Diagrama de Arquitectura
 
 ```mermaid
