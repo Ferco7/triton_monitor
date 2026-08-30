@@ -67,20 +67,6 @@ ignorado por git.
 Los tests automatizados (escenarios A/B/C y validador forense) se documentan
 en `tests/README.md`.
 
-## Estado del Proyecto
-
-| Componente                                           | Estado        | Referencia            |
-| ---------------------------------------------------- | ------------- | --------------------- |
-| Roles 1-5 integrados (excepciones, CLI, asyncio, JSON, pipeline) | Completo | historial `main` |
-| Req 4: `exception_tree` serializado en el log JSON   | Completo      | `TritonQueueHandler`  |
-| Consola compatible Python 3.11 (campo `taskName` fuera del formato) | Completo | commit `db3e2ce` |
-| Rol 6: suite de escenarios y validador forense       | Completo (6/6) | PR #7 (`687b65b`) |
-| Verificacion en clon limpio (flujo del README)       | Completo      | Python 3.11 y 3.14    |
-
-La suite automatizada (`test_scenarios.py` 3/3 y `test_forensic_validator.py`
-3/3) pasa en Python 3.11 y 3.14. Pendiente: la grabacion del video de defensa
-por rol.
-
 ## Evidencia de Ejecucion
 
 Capturas reales de una corrida local (verificado en Python 3.11 y 3.14). Las
