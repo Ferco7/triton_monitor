@@ -98,22 +98,26 @@ graph TD
     LISTENER["QueueListener - Hilo Secundario"]
     FMT["AsyncJSONFormatter"]
     HANDLER["RotatingFileHandler"]
-    LOG_FILE["production_log.gz"]
+    CONSOLE["StreamHandler - stdout"]
+    LOG_FILE["triton_services.log + backups .gz"]
 
     CLI -- "1. Sanitiza con argparse" --> SAN
     CLI -- "2. Inicia asyncio.run" --> CORE
     CORE -- "3. asyncio.gather" --> AWS
     CORE -- "3. asyncio.gather" --> AZURE
     CORE -- "3. asyncio.gather" --> GCP
-    AWS -. "Falla / Timeout" .-> EXC
-    AZURE -. "Falla / Red" .-> EXC
+    AWS -. "Timeout" .-> EXC
+    AZURE -. "Red / 504" .-> EXC
+    GCP -. "Corrupto" .-> EXC
     GCP -. "Exito" .-> RES
     EXC -- "4. Propaga hacia" --> CLI
+    RES -- "resultados (tabla)" --> CLI
     CLI -- "5. Captura quirurgica except*" --> LOG_ENG
     LOG_ENG -- "6. Encola en microsegundos" --> QUEUE
     QUEUE -- "7. Consume desatendido" --> LISTENER
-    LISTENER -- "8. Formatea a JSON recursivo" --> FMT
-    LISTENER -- "9. Escribe y rota" --> HANDLER
+    LISTENER -- "8a. Formatea a JSON recursivo" --> FMT
+    LISTENER -- "8b. Texto plano" --> CONSOLE
+    FMT -- "9. Escribe y rota" --> HANDLER
     HANDLER -- "10. Rollover & Gzip" --> LOG_FILE
 ```
 
