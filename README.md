@@ -81,6 +81,10 @@ serializado en `triton_services.log`.
 | --------------------------------------- | --------------------------------------- |
 | ![caos](docs/images/caos.png)           | ![log forense](docs/images/log_forense.png) |
 
+| Tests Rol 6 - escenarios: 3/3 pasan     | Tests Rol 6 - forense: 3/3 pasan      |
+| --------------------------------------- | --------------------------------------- |
+| ![tests scenarios](docs/images/test_scenarios.png) | ![tests forense](docs/images/test_forensic.png) |
+
 ## Diagrama de Arquitectura
 
 ```mermaid
