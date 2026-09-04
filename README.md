@@ -103,9 +103,9 @@ graph TD
 
     CLI -- "1. Sanitiza con argparse" --> SAN
     CLI -- "2. Inicia asyncio.run" --> CORE
-    CORE -- "3. asyncio.gather" --> AWS
-    CORE -- "3. asyncio.gather" --> AZURE
-    CORE -- "3. asyncio.gather" --> GCP
+    CORE -- "3. asyncio.TaskGroup" --> AWS
+    CORE -- "3. asyncio.TaskGroup" --> AZURE
+    CORE -- "3. asyncio.TaskGroup" --> GCP
     AWS -. "Timeout" .-> EXC
     AZURE -. "Red / 504" .-> EXC
     GCP -. "Corrupto" .-> EXC
@@ -165,7 +165,7 @@ Validacion en la frontera CLI (sanitizadores custom de argparse):
 Concurrencia y telemetria asincrona con httpx + asyncio:
 
 - Corrutinas paralelas que consultan APIs reales: `jsonplaceholder` (AWS, Azure, GCP) y, en modo caos, `httpbin.org/delay/3` (timeout), `httpbin.org/status/504` (HTTP status) y `httpbin.org/xml` (payload corrupto).
-- Orquestacion con `asyncio.gather(return_exceptions=True)` + `ExceptionGroup` manual: al fallar una tarea no se cancelan las restantes, garantizando la captura de todas las anomalias concurrentes (decision validada con la catedra; el fail-fast de `TaskGroup` amputaria categorias del arbol forense).
+- Orquestacion con `asyncio.TaskGroup` + un wrapper (`_run_mission_with_capture`) que aísla cada fallo como valor para evitar el fail-fast y conservar las 3 categorias del arbol forense. Aunque `asyncio.gather` resulta mas limpio en lo tecnico, se opta por `TaskGroup` para seguir la letra de la consigna.
 - Los fallos nativos de httpx se re-lanzan encadenados (`raise ... from`) como excepciones semanticas y con contexto forense via `add_note()`.
 
 ### logging_engine.py (Roles 3 y 4)

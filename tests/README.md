@@ -64,9 +64,10 @@ IMPORTANTE (correccion respecto a la plantilla original):
   debe validarse para el escenario C; stderr queda vacio porque el
   ExceptionGroup se captura con except* y no propaga a la salida de error.
 - Usar `-t 1.5` en caos: contra `httpbin.org/delay/3` (tarda ~3 segundos)
-  el timeout se dispara de forma garantizada y `asyncio.gather` no cancela
-  las demas tareas, asi se materializan las 3 categorias (timeout, 504 y
-  payload corrupto). Con `-t 3.0` exactos es una carrera contra el endpoint.
+  el timeout se dispara de forma garantizada y el wrapper del TaskGroup
+  aisla cada fallo (evitando el fail-fast), asi se materializan las 3
+  categorias (timeout, 504 y payload corrupto). Con `-t 3.0` exactos es una
+  carrera contra el endpoint.
   El validador forense corre el caos con `-t 2.0`, igualmente garantizado
   (2.0s < ~3s del endpoint).
 - Las notas forenses (`[FORENSE ...]`) viajan dentro del nodo

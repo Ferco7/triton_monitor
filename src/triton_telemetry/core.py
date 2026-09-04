@@ -1,5 +1,5 @@
 """
-Logica asincrona de consulta paralela con httpx + asyncio.gather + ExceptionGroup.
+Logica asincrona de consulta paralela con httpx + asyncio.TaskGroup + ExceptionGroup.
 Consume APIs reales en internet (jsonplaceholder, httpbin).
 
 responsable: integrante 2
@@ -14,6 +14,7 @@ from .exceptions import (
     CorruptedPayloadError,
     NetworkPeeringError,
     ProviderTimeoutError,
+    TritonError,
 )
 
 # Proveedores cloud soportados (nombres alineados con app_operator.py)
@@ -87,21 +88,41 @@ async def query_provider_telemetry(
     }
 
 
+async def _run_mission_with_capture(
+    provider: str, timeout: float, use_chaos: bool
+):
+    """Aisla el fallo de cada proveedor para que no cancele a las tareas
+    hermanas dentro del TaskGroup (evita el fail-fast nativo). Devuelve el
+    dict nominal o la excepcion semantica como sentinela de incidente."""
+    try:
+        return await query_provider_telemetry(provider, timeout, use_chaos)
+    except TritonError as semantic_error:
+        return semantic_error
+
+
 async def scan_all_providers(
     providers: list, timeout: float, use_chaos: bool = False
 ) -> list:
-    """Orquesta consultas paralelas a varios proveedores y agrupa errores."""
-    tasks = [
-        query_provider_telemetry(provider, timeout, use_chaos)
-        for provider in providers
-    ]
+    """Orquesta consultas paralelas a varios proveedores y agrupa errores.
 
-    # gather con return_exceptions=True NO cancela las demas tareas al fallar una,
-    # de modo que se recolectan todas las excepciones (patron del Lab 3).
-    results = await asyncio.gather(*tasks, return_exceptions=True)
+    Se usa asyncio.TaskGroup con un wrapper (_run_mission_with_capture) que
+    captura cada fallo como valor para evitar que el fail-fast de TaskGroup
+    cancele a las demas tareas y se pierdan categorias del arbol forense.
+    Luego los incidentes se agrupan en un ExceptionGroup para la captura
+    quirurgica con except*.
+    """
+    async with asyncio.TaskGroup() as task_group:
+        tasks = [
+            task_group.create_task(
+                _run_mission_with_capture(provider, timeout, use_chaos)
+            )
+            for provider in providers
+        ]
 
-    errors = [r for r in results if isinstance(r, Exception)]
-    success = [r for r in results if not isinstance(r, Exception)]
+    outcomes = [task.result() for task in tasks]
+
+    errors = [o for o in outcomes if isinstance(o, Exception)]
+    success = [o for o in outcomes if not isinstance(o, Exception)]
 
     if errors:
         raise ExceptionGroup(
