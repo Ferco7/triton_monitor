@@ -85,6 +85,12 @@ serializado en `triton_services.log`.
 | --------------------------------------- | --------------------------------------- |
 | ![tests scenarios](docs/images/test_scenarios.png) | ![tests forense](docs/images/test_forensic.png) |
 
+## Video de Defensa
+
+Demonstracion del proyecto y exposicion de la defensa por rol:
+
+[Ver video en YouTube](https://youtu.be/kbAf7DCM7Es)
+
 ## Diagrama de Arquitectura
 
 ```mermaid
